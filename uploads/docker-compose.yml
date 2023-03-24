@@ -1,0 +1,121 @@
+version: '3.3'
+services:
+  mail_javis:
+    #image: tvial/docker-mailserver:latest
+    image: docker.io/mailserver/docker-mailserver:11.1.0
+    #image: docker.io/mailserver/docker-mailserver:10.4
+    container_name: mail_javis
+    hostname: smtp
+    domainname: javis.vn
+    env_file: .env
+    ports:
+      - "25:25"    # SMTP  (explicit TLS => STARTTLS)
+      - "143:143"  # IMAP4 (explicit TLS => STARTTLS)
+      - "465:465"  # ESMTP (implicit TLS)
+      - "587:587"  # ESMTP (explicit TLS => STARTTLS)
+      - "993:993"  # IMAP4 (implicit TLS)
+      #- "4190:4190" # SIEVE STARTTLS - Optional - Recommended for mail filtering
+    volumes:
+      - ./mail-data/:/var/mail/
+      - ./mail-state/:/var/mail-state/
+      - ./mail-logs/:/var/log/mail/
+      - ./config/:/tmp/docker-mailserver/
+      #- ./config/opendkim:/etc/opendkim
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/letsencrypt/:/etc/letsencrypt/
+      - ./docker-data/dms/cron/sa-learn:/etc/cron.d/sa-learn
+      - ./config/rbl_reply_map:/etc/postfix/rbl_reply_map
+      - ./config/postscreen_dnsbl_reply_map:/etc/postfix/postscreen_dnsbl_reply_map
+      - ./config/blacklisted_domains:/etc/postfix/blacklisted_domains
+    environment:
+      - ENABLE_SPAMASSASSIN=1
+      - SPAMASSASSIN_SPAM_TO_INBOX=1
+      - MOVE_SPAM_TO_JUNK=1
+      - ENABLE_CLAMAV=1
+      - ENABLE_FAIL2BAN=1
+      - ENABLE_POSTGREY=1
+      - ENABLE_SASLAUTHD=0
+      - ONE_DIR=1
+      - TZ=Asia/Ho_Chi_Minh
+      - ENABLE_SPAMASSASSIN_KAM=1
+      - SA_SPAM_SUBJECT=***SPAM(_SCORE_)***
+      - SA_TAG=-100000.0
+      - SA_TAG2=3.75
+      - SA_KILL=100000.0
+      #- LDAP_SERVER_HOST=javis.vn
+      - ENABLE_AMAVIS=0
+      #- AMAVIS_LOGLEVEL=-1/-2/-3
+      #- DMS_DEBUG=1
+      #- SSL_TYPE=manual
+      #- POSTMASTER_ADDRESS=tuan@javis.vn
+      #- POSTFIX_INET_PROTOCOLS=ipv4
+      #- DOVECOT_INET_PROTOCOLS=ipv4
+      - PFLOGSUMM_TRIGGER=daily_cron
+      - PFLOGSUMM_RECIPIENT=dmarc@javis.vn
+      - PFLOGSUMM_SENDER=tuan@javis.vn
+      - LOGWATCH_INTERVAL=daily
+      - LOGWATCH_RECIPIENT=dmarc@javis.vn
+      - LOGWATCH_SENDER=tuan@javis.vn
+      - SPOOF_PROTECTION=1
+      #- ENABLE_DNSBL=0
+      #- ENABLE_SRS=1
+      #- SRS_EXCLUDE_DOMAINS=javis.vn
+      #- SSL_TYPE=letsencrypt
+      #- LDAP_START_TLS=yes
+      - DOVECOT_TLS=yes
+    #stop_grace_period: 1m
+    cap_add:
+      - NET_ADMIN
+      - SYS_PTRACE
+    # restart: always
+    networks:
+      overlay-network:
+  webmail_javis:
+    #image: waldner/rainloop:1.15.0-php7.4.16
+    image: waldner/rainloop:latest
+    container_name: webmail_javis
+    volumes:
+      - /etc/letsencrypt/live/smtp.javis.vn/fullchain.pem:/etc/ssl/cert.pem
+      - /etc/letsencrypt/live/smtp.javis.vn/privkey.pem:/etc/ssl/cert.key
+      - /etc/letsencrypt/ssl-dhparams.pem:/etc/ssl/certs/dhparam.pem
+      - webmaildata:/rainloop/data
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "9000:80"
+    #  - "9443:443"
+    #expose:
+    #  - 9000
+    environment:
+      - EXTERNAL_HTTPS_PORT=443
+      - EXTERNAL_HTTP_PORT=9000
+      - USE_SSL=0
+      #- EXTERNAL_HTTPS_PORT=9000
+      - TZ=Asia/Ho_Chi_Minh
+      - LOG_TO_STDOUT=true
+      - UID=nginx
+      - GID=nginx
+      - ENABLE_FETCHMAIL=true
+      - FETCHMAIL_INTERVAL=3
+      #- VIRTUAL_HOST=webmail.javis.vn
+      #- VIRTUAL_PORT=9000
+      #- LETSENCRYPT_EMAIL=hoang.nguyenvan2107@gmail.com
+      #- LETSENCRYPT_HOST="webmail.javis.vn,imap.javis.vn,smtp.javis.vn,javis.vn"
+      #- HTTPS_METHOD=redirect
+      #- LDAP_START_TLS=yes
+      - CERT_NAME=webmail.javis.vn
+    links:
+      - mail_javis
+    depends_on:
+      - mail_javis
+    networks:
+      overlay-network:
+volumes:
+  maildata:
+    driver: local
+  mailstate:
+    driver: local
+  webmaildata:
+    driver: local
+networks:
+  overlay-network:
+    external: true
